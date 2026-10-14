@@ -1,6 +1,8 @@
+import { userInfo } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
+  const username = process.env.PI_THUNDER_FORGE_USER?.trim() || userInfo().username;
   pi.on("before_provider_headers", (event, ctx) => {
     if (ctx.model?.provider !== "thunder-forge") return;
 
@@ -8,6 +10,6 @@ export default function (pi: ExtensionAPI) {
     for (const name of Object.keys(event.headers)) {
       if (name.toLowerCase() === "x-olla-session-id") delete event.headers[name];
     }
-    event.headers["X-Olla-Session-ID"] = `user:pi:${ctx.sessionManager.getSessionId()}`;
+    event.headers["X-Olla-Session-ID"] = `${encodeURIComponent(username)}:pi:${ctx.sessionManager.getSessionId()}`;
   });
 }
