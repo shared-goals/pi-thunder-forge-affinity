@@ -18,6 +18,7 @@ Read [README.md](./README.md) before changing installation, configuration, or ro
 - Pull before committing or pushing. Preserve unrelated local changes; use an isolated checkout if they block integration.
 - Use imperative Conventional Commit subjects and push to `origin/main` without force.
 - Use `gh` for GitHub repository management.
+- Use `Shared Goals <noreply@github.com>` as the Git author, committer, and release tagger identity. Check the full history for secrets and private infrastructure references before public publication.
 
 ## Versions and releases
 

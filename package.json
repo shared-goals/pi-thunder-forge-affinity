@@ -1,9 +1,17 @@
 {
   "name": "pi-thunder-forge-affinity",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Per-session Thunder Forge routing affinity for Pi",
+  "license": "MIT",
+  "keywords": ["pi-package", "pi-extension", "session-affinity", "olla"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shared-goals/pi-thunder-forge-affinity.git"
+  },
+  "homepage": "https://github.com/shared-goals/pi-thunder-forge-affinity#readme",
+  "bugs": "https://github.com/shared-goals/pi-thunder-forge-affinity/issues",
   "engines": { "node": ">=24" },
   "scripts": {
     "test": "node --experimental-strip-types --test tests/*.test.mjs"

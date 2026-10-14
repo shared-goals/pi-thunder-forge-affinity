@@ -1,46 +1,37 @@
-# Pi Thunder Forge affinity
+# Pi Thunder Forge Affinity
 
-Расширение Pi задаёт `X-Olla-Session-ID: <username>:pi:<session-uuid>` только для провайдера `thunder-forge`. Ключ стабилен при продолжении разговора и меняется для новой Pi-сессии. Olla учитывает модель отдельно. Разные ключи позволяют распределять разговоры между нодами, но не гарантируют выбор разных нод.
+[![CI](https://github.com/shared-goals/pi-thunder-forge-affinity/actions/workflows/ci.yml/badge.svg)](https://github.com/shared-goals/pi-thunder-forge-affinity/actions/workflows/ci.yml)
 
-Используется штатный `before_provider_headers`; необходим Pi с поддержкой этого события (проверено на установленном Pi 1.2.0). Повторные попытки запроса используют тот же заголовок. Старые варианты заголовка удаляются без учёта регистра; остальные заголовки и провайдеры не меняются.
+## About
 
-## Установка
+A small [Pi](https://github.com/earendil-works/pi) extension that adds
+`X-Olla-Session-ID` to requests for the exact provider ID `thunder-forge`:
 
-Установить пакет из Git-репозитория:
-
-```bash
-pi install https://github.com/shared-goals/pi-thunder-forge-affinity.git
-pi list
+```text
+<username>:pi:<session-uuid>
 ```
 
-Git должен иметь доступ к Git-репозиторию через настроенный credential helper. Альтернатива с настроенными SSH-ключами: `pi install git:git@github.com:shared-goals/pi-thunder-forge-affinity.git`. Публикация в npm не требуется.
+The same conversation keeps the same key. New conversations, including native
+Pi subagent sessions, use their own session IDs. [Olla](https://github.com/thushan/olla)
+scopes affinity to the requested model separately.
 
-Pi добавляет источник в `packages` в `~/.pi/agent/settings.json` и самостоятельно клонирует пакет. Его каталог виден в `pi list`. Удалить постоянные `X-Olla-Session-ID` из описаний моделей Thunder Forge в `~/.pi/agent/models.json`, затем выполнить `/reload` в Pi. Настройки `thunderForgeAffinity` хранятся отдельно в пользовательском `settings.json` и не меняются при обновлении пакета.
+## Quick start
 
-Для pi-subagents добавить абсолютный путь `<каталог установленного пакета>/extensions/thunder-forge-affinity.ts` в массив `subagents.defaultSubagentOnlyExtensions` в `~/.pi/agent/settings.json`. Это сохраняет обычное обнаружение расширений и явно подключает affinity к foreground-детям и детям с ограниченным набором расширений; обычные background-дети также обнаруживают установленный пакет. Явные настройки конкретного агента или проекта могут переопределить default; их нужно проверять отдельно.
-
-### Переход с ручного symlink
-
-После успешного `pi install` удалить только старый symlink `~/.pi/agent/extensions/thunder-forge-affinity.ts`, предварительно проверив его через `ls -l`. Не удалять исходный репозиторий. В `subagents.defaultSubagentOnlyExtensions` заменить старый путь на файл установленного пакета, чтобы расширение не загружалось одновременно из разных копий. Выполнить `/reload`.
-
-### Обновление и удаление
+### 1. Install
 
 ```bash
-pi update --extensions
-pi remove https://github.com/shared-goals/pi-thunder-forge-affinity.git
+pi install https://github.com/shared-goals/pi-thunder-forge-affinity
 ```
 
-`pi update --extensions` обновляет все установленные extension-пакеты. После обновления выполнить `/reload`. При удалении убрать также соответствующую запись из `subagents.defaultSubagentOnlyExtensions`; иначе явная загрузка файла продолжит действовать. Если у источника указан tag или commit, он закреплён и автоматически на новую версию не перемещается.
+For a pinned release:
 
-### Версии и теги
+```bash
+pi install https://github.com/shared-goals/pi-thunder-forge-affinity@v0.1.2
+```
 
-Правила выпуска находятся в [AGENTS.md](./AGENTS.md#versions-and-releases). Версия в `package.json` соответствует аннотированному тегу `vMAJOR.MINOR.PATCH`. Опубликованные теги неизменяемы; исправления выпускаются новой версией. Коммиты только с документацией не требуют новой версии.
+### 2. Configure the username
 
-Установка без суффикса `@...` получает изменения ветки при обновлении. Для воспроизводимой установки укажи существующий release tag, например `https://github.com/shared-goals/pi-thunder-forge-affinity.git@vX.Y.Z`, заменив `vX.Y.Z` на опубликованный тег. Для перехода на следующую закреплённую версию повтори `pi install` с новым тегом; обычное обновление не снимает закрепление.
-
-## Имя пользователя
-
-В `~/.pi/agent/settings.json` добавь блок:
+Add this block to Pi's user settings, normally `~/.pi/agent/settings.json`:
 
 ```json
 {
@@ -50,24 +41,133 @@ pi remove https://github.com/shared-goals/pi-thunder-forge-affinity.git
 }
 ```
 
-Пользовательский каталог учитывает `PI_CODING_AGENT_DIR`, если он задан. Настройки расширения читаются перед запросом; проектные `.pi/settings.json` не используются.
+Keep the existing `thunder-forge` provider configuration in `models.json`.
+The extension does not configure endpoints, credentials, models, or thinking.
 
-Для разового переопределения запусти Pi с переменной окружения:
+### 3. Reload Pi
+
+Run `/reload` in an open Pi session. A new Pi process loads the package on startup.
+
+## Configuration and header contract
+
+Username priority, from highest to lowest:
+
+1. Non-empty `PI_THUNDER_FORGE_USER` environment variable.
+2. `thunderForgeAffinity.username` in Pi's user `settings.json`.
+3. The OS account username from `os.userInfo().username`.
+
+For a per-process override:
 
 ```bash
-PI_THUNDER_FORGE_USER=alice pi
+PI_THUNDER_FORGE_USER=bob pi
 ```
 
-Приоритет: непустая `PI_THUNDER_FORGE_USER` → `thunderForgeAffinity.username` в настройках Pi → имя текущего пользователя ОС (`os.userInfo().username`). Дочерние процессы наследуют переменную. Пробелы по краям удаляются; явно заданное значение в JSON должно быть непустой строкой. Имя кодируется через `encodeURIComponent`, чтобы Unicode, двоеточия и другие специальные символы были безопасны в HTTP-заголовке. После изменения окружения перезапусти Pi; для первого подключения новой версии расширения выполни `/reload`.
+`PI_CODING_AGENT_DIR` changes the user settings directory. Project `.pi/settings.json`
+files do not override the username. Settings are read before each provider request;
+restart Pi to change its inherited environment.
 
-## Проверка
+The extension:
+
+- changes headers only for provider ID `thunder-forge`;
+- trims the username and percent-encodes it with `encodeURIComponent`;
+- replaces existing `X-Olla-Session-ID` headers under any capitalization;
+- preserves every other header;
+- uses Pi's current session ID instead of generating a new ID per request.
+
+A configured username must be a non-empty string. Invalid settings raise a hook
+error; Pi handles that error and may continue the request without affinity.
+The header is routing metadata, not authentication. Its username remains readable
+and may appear in gateway logs; use a pseudonym when appropriate.
+
+## Subagents
+
+Native background children discover installed packages unless their extension
+policy disables normal discovery. Foreground children require explicit loading.
+
+For explicit child loading, find the installed package directory with `pi list`
+and add its absolute extension path to Pi's user settings:
+
+```json
+{
+  "subagents": {
+    "defaultSubagentOnlyExtensions": [
+      "/absolute/package/path/extensions/thunder-forge-affinity.ts"
+    ]
+  }
+}
+```
+
+Agent-specific or project-specific subagent settings can override this default.
+A child must load the extension to receive its own affinity key. External CLI/job
+agents use their own runner configuration and are outside this Pi hook's scope.
+
+## Olla routing
+
+```text
+Pi -> Thunder Forge edge -> Olla -> inference endpoints
+ |                           |
+ `- sends session header     `- owns pinning and repinning
+```
+
+Enable Olla sticky sessions with `session_header` as a key source and preserve the
+header through each proxy hop. Inspect `X-Olla-Endpoint`, `X-Olla-Sticky-Session`,
+and `X-Olla-Sticky-Key-Source` response headers to verify routing.
+
+Distinct keys allow conversations to be balanced independently; they do not
+require different nodes. Affinity does not guarantee a cache hit after eviction,
+restart, TTL expiry, failover, or a changed prompt prefix.
+
+## Updating and removal
+
+Update this package, then run `/reload`:
+
+```bash
+pi update https://github.com/shared-goals/pi-thunder-forge-affinity
+```
+
+A tagged install stays pinned. To upgrade it, repeat `pi install` with the new tag.
+
+To uninstall:
+
+```bash
+pi remove https://github.com/shared-goals/pi-thunder-forge-affinity
+```
+
+Also remove this package's entry from `subagents.defaultSubagentOnlyExtensions`
+if explicit child loading was configured, then run `/reload`.
+
+## Requirements
+
+- Node.js 24 or newer.
+- Pi with `before_provider_headers` and `sessionManager.getSessionId()`; tested with Pi 1.2.0.
+- A configured `thunder-forge` provider.
+- A downstream router that consumes `X-Olla-Session-ID`.
+
+## Development
 
 ```bash
 npm test
+git diff --check
 ```
 
-Тест проверяет стабильность ключа, независимость сессий, замену старого заголовка и отсутствие изменений у других провайдеров. Дополнительно при первоначальной установке проверены реальные HTTP-запросы Pi и native pi-subagents через локальный тестовый сервер. На Thunder Forge получен HTTP 200 с `sticky: miss` и `source: session_header`; полная live-проверка `miss → hit` пока не завершена.
+Tests cover username precedence, header encoding and validation, per-session
+stability, independent conversations, and isolation from other providers.
+CI runs the test suite on Node.js 24.
 
-Routing affinity не гарантирует попадание в KV-cache. Olla может перепривязать ключ после отказа ноды, истечения TTL, вытеснения записи или перезапуска.
+## Versioning and security
 
-Источники: [пакеты Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md), [API расширений Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts), [sticky sessions Olla](https://thushan.github.io/olla/concepts/sticky-sessions/).
+Versions follow [Semantic Versioning](https://semver.org/). `package.json` contains
+the version; annotated release tags use `vMAJOR.MINOR.PATCH` and are immutable.
+See [CHANGELOG.md](./CHANGELOG.md) and [SECURITY.md](./SECURITY.md).
+
+## Related documentation
+
+- [Pi packages](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md)
+- [Pi extension API](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts)
+- [Pi subagents](https://github.com/nicobailon/pi-subagents)
+- [Olla sticky sessions](https://thushan.github.io/olla/concepts/sticky-sessions/)
+- [Thunder Forge](https://github.com/shared-goals/thunder-forge)
+
+## License
+
+[MIT](./LICENSE)
