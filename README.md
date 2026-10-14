@@ -6,15 +6,31 @@
 
 ## Установка
 
-Из клонированного репозитория подключить файл как локальное расширение:
+Установить пакет из Git-репозитория:
 
 ```bash
-ln -s "$PWD/extensions/thunder-forge-affinity.ts" ~/.pi/agent/extensions/thunder-forge-affinity.ts
+pi install https://github.com/shared-goals/pi-thunder-forge-affinity.git
+pi list
 ```
 
-Удалить постоянные `X-Olla-Session-ID` из описаний моделей Thunder Forge в `~/.pi/agent/models.json`, затем выполнить `/reload` в Pi.
+Git должен иметь доступ к Git-репозиторию через настроенный credential helper. Альтернатива с настроенными SSH-ключами: `pi install git:git@github.com:shared-goals/pi-thunder-forge-affinity.git`. Публикация в npm не требуется.
 
-Для pi-subagents добавить абсолютный путь к этому файлу в `subagents.defaultSubagentOnlyExtensions` в `~/.pi/agent/settings.json`. Это сохраняет обычное обнаружение расширений и явно подключает affinity к дочерним сессиям. Явные настройки конкретного агента или проекта могут переопределить default; их нужно проверять отдельно.
+Pi добавляет источник в `packages` в `~/.pi/agent/settings.json` и самостоятельно клонирует пакет. Его каталог виден в `pi list`. Удалить постоянные `X-Olla-Session-ID` из описаний моделей Thunder Forge в `~/.pi/agent/models.json`, затем выполнить `/reload` в Pi. Настройки `thunderForgeAffinity` хранятся отдельно в пользовательском `settings.json` и не меняются при обновлении пакета.
+
+Для pi-subagents добавить абсолютный путь `<каталог установленного пакета>/extensions/thunder-forge-affinity.ts` в массив `subagents.defaultSubagentOnlyExtensions` в `~/.pi/agent/settings.json`. Это сохраняет обычное обнаружение расширений и явно подключает affinity к foreground-детям и детям с ограниченным набором расширений; обычные background-дети также обнаруживают установленный пакет. Явные настройки конкретного агента или проекта могут переопределить default; их нужно проверять отдельно.
+
+### Переход с ручного symlink
+
+После успешного `pi install` удалить только старый symlink `~/.pi/agent/extensions/thunder-forge-affinity.ts`, предварительно проверив его через `ls -l`. Не удалять исходный репозиторий. В `subagents.defaultSubagentOnlyExtensions` заменить старый путь на файл установленного пакета, чтобы расширение не загружалось одновременно из разных копий. Выполнить `/reload`.
+
+### Обновление и удаление
+
+```bash
+pi update --extensions
+pi remove https://github.com/shared-goals/pi-thunder-forge-affinity.git
+```
+
+`pi update --extensions` обновляет все установленные extension-пакеты. После обновления выполнить `/reload`. При удалении убрать также соответствующую запись из `subagents.defaultSubagentOnlyExtensions`; иначе явная загрузка файла продолжит действовать. Если у источника указан tag или commit, он закреплён и автоматически на новую версию не перемещается.
 
 ## Имя пользователя
 
@@ -48,4 +64,4 @@ npm test
 
 Routing affinity не гарантирует попадание в KV-cache. Olla может перепривязать ключ после отказа ноды, истечения TTL, вытеснения записи или перезапуска.
 
-Источники: [API расширений Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts), [sticky sessions Olla](https://thushan.github.io/olla/concepts/sticky-sessions/).
+Источники: [пакеты Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/packages.md), [API расширений Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts), [sticky sessions Olla](https://thushan.github.io/olla/concepts/sticky-sessions/).

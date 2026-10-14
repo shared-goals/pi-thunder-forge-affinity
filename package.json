@@ -1,12 +1,15 @@
 {
   "name": "pi-thunder-forge-affinity",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Per-session Thunder Forge routing affinity for Pi",
   "engines": { "node": ">=24" },
   "scripts": {
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
     "extensions": ["./extensions/thunder-forge-affinity.ts"]
