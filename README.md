@@ -26,7 +26,7 @@ pi install https://github.com/shared-goals/pi-thunder-forge-affinity
 For a pinned release:
 
 ```bash
-pi install https://github.com/shared-goals/pi-thunder-forge-affinity@v0.1.2
+pi install https://github.com/shared-goals/pi-thunder-forge-affinity@v0.1.3
 ```
 
 ### 2. Configure the username
@@ -117,6 +117,27 @@ Distinct keys allow conversations to be balanced independently; they do not
 require different nodes. Affinity does not guarantee a cache hit after eviction,
 restart, TTL expiry, failover, or a changed prompt prefix.
 
+## Recovery after HTTP 507
+
+An HTTP 507 model-load memory error advances the affected model's key to
+`<username>:pi:<session-uuid>:retry:1`, then `:retry:2` and `:retry:3` on subsequent
+matching errors. Other models and sessions keep their own keys. Successful requests
+keep the selected key; session metadata preserves it across reload and resume.
+The limit is three rotations per model on the active session branch, not three
+rotations after every successful request.
+
+The extension does not issue or schedule retries. Enable Pi's retry policy to let
+its next attempt use the new key; a later manual request also uses that key.
+It recognizes finalized assistant errors beginning with HTTP status 507 and the
+oMLX "Cannot load", "projected memory", and "memory ceiling" diagnostics, only when
+no response content was generated. Unrelated 507 errors and partial responses do
+not change affinity. Pi's HTTP response hook skips non-2xx responses, so recovery
+uses the finalized error event before Pi's agent-level retry loop.
+
+A new key requests a fresh Olla selection; it cannot force a different node,
+reserve capacity, or free memory. If every eligible node lacks memory, requests
+can still fail. No affinity state is changed for other HTTP status codes.
+
 ## Updating and removal
 
 Update this package, then run `/reload`:
@@ -139,7 +160,7 @@ if explicit child loading was configured, then run `/reload`.
 ## Requirements
 
 - Node.js 24 or newer.
-- Pi with `before_provider_headers` and `sessionManager.getSessionId()`; tested with Pi 1.2.0.
+- Pi with `before_provider_headers`, `message_end`, and session metadata APIs; tested with Pi 1.2.0.
 - A configured `thunder-forge` provider.
 - A downstream router that consumes `X-Olla-Session-ID`.
 
@@ -147,12 +168,17 @@ if explicit child loading was configured, then run `/reload`.
 
 ```bash
 npm test
+npm run test:integration # requires an installed Pi CLI
 git diff --check
 ```
 
 Tests cover username precedence, header encoding and validation, per-session
-stability, independent conversations, and isolation from other providers.
-CI runs the test suite on Node.js 24.
+stability, independent conversations, isolation from other providers, and bounded
+507 recovery with reload/resume persistence.
+CI runs the unit suite on Node.js 24. Integration tests use a local HTTP fixture,
+not a live inference service. Set `PI_BIN` for a non-default Pi executable and
+`PI_SUBAGENTS_EXTENSION` to the installed `pi-subagents/index.js` to also verify a
+native fresh child. Without that optional path the child check is skipped.
 
 ## Versioning and security
 

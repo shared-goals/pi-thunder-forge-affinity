@@ -20,24 +20,47 @@ function fixture(t) {
     }
     rmSync(agentDir, { recursive: true, force: true });
   });
-  let handler;
-  register({ on: (name, callback) => {
-    assert.equal(name, "before_provider_headers");
-    handler = callback;
-  } });
+  const handlers = {};
+  const entries = new Map();
+  const context = (sessionId, provider, model) => ({
+    model: { provider, id: model },
+    sessionManager: {
+      getSessionId: () => sessionId,
+      getBranch: () => entries.get(sessionId) ?? [],
+    },
+  });
+  let activeSession;
+  const api = {
+    on: (name, callback) => { handlers[name] = callback; },
+    appendEntry(customType, data) {
+      const branch = entries.get(activeSession) ?? [];
+      branch.push({ type: "custom", customType, data });
+      entries.set(activeSession, branch);
+    },
+  };
+  register(api);
   return {
     settings(username) {
       writeFileSync(join(agentDir, "settings.json"), JSON.stringify({
         thunderForgeAffinity: { username },
       }));
     },
-    request(sessionId = "session-a", provider = "thunder-forge") {
+    request(sessionId = "session-a", provider = "thunder-forge", model = "coder") {
       const event = { headers: { "x-olla-session-id": "old", Authorization: "test" } };
-      handler(event, {
-        model: { provider }, sessionManager: { getSessionId: () => sessionId },
-      });
+      activeSession = sessionId;
+      handlers.before_provider_headers(event, context(sessionId, provider, model));
       return event.headers;
     },
+    response(status, sessionId = "session-a", provider = "thunder-forge", model = "coder", overrides = {}) {
+      activeSession = sessionId;
+      handlers.message_end({ message: {
+        role: "assistant", provider, model, content: [],
+        stopReason: status === 200 ? "stop" : "error",
+        errorMessage: `${status}: Cannot load fixture-model: projected memory would exceed memory ceiling`,
+        ...overrides,
+      } }, context(sessionId, provider, model));
+    },
+    reload() { register(api); },
   };
 }
 
@@ -77,4 +100,47 @@ test("settings usernames are validated and encoded for HTTP", (t) => {
   }
   process.env.PI_THUNDER_FORGE_USER = "override";
   assert.equal(f.request()["X-Olla-Session-ID"], "override:pi:session-a");
+});
+
+test("507 rotates affinity at most three times and success preserves the selected key", (t) => {
+  const f = fixture(t);
+  f.settings("alice");
+  for (const status of [200, 400, 429, 500, 502, 503]) f.response(status);
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a");
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    f.response(507);
+    const key = `alice:pi:session-a:retry:${attempt}`;
+    assert.equal(f.request()["X-Olla-Session-ID"], key);
+    f.response(200);
+    assert.equal(f.request()["X-Olla-Session-ID"], key);
+  }
+  f.response(507);
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a:retry:3");
+  f.reload();
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a:retry:3");
+});
+
+test("507 recovery is isolated by provider, session and model", (t) => {
+  const f = fixture(t);
+  f.settings("alice");
+  f.response(507, "session-a", "other");
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a");
+  f.response(507);
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a:retry:1");
+  assert.equal(f.request("session-b")["X-Olla-Session-ID"], "alice:pi:session-b");
+  assert.equal(f.request("session-a", "thunder-forge", "agent")["X-Olla-Session-ID"],
+    "alice:pi:session-a");
+});
+
+test("unrelated capacity errors, aborted and partial responses never rotate affinity", (t) => {
+  const f = fixture(t);
+  f.settings("alice");
+  for (const overrides of [
+    { errorMessage: "507: disk storage is full" },
+    { errorMessage: "500: Cannot load model: projected memory exceeds memory ceiling" },
+    { stopReason: "aborted" },
+    { model: "agent" },
+    { content: [{ type: "text", text: "Partial answer" }] },
+  ]) f.response(507, "session-a", "thunder-forge", "coder", overrides);
+  assert.equal(f.request()["X-Olla-Session-ID"], "alice:pi:session-a");
 });
